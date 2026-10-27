@@ -1,0 +1,73 @@
+# Kubernetes manifests for the colour app: 2x backend pods, 2x frontend pods.
+# DOCKERHUB_USER and IMAGE_TAG are placeholders. k8s-deploy.sh fills them in,
+# so this file never needs editing per build.
+
+# ---------- Backend: runs the pods ----------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: DOCKERHUB_USER/colour-backend:IMAGE_TAG
+          ports:
+            - containerPort: 5000
+---
+# ---------- Backend: finds the pods ----------
+# ClusterIP = internal only. The name "backend" must match proxy_pass in nginx.conf.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+---
+# ---------- Frontend: runs the pods ----------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: DOCKERHUB_USER/colour-frontend:IMAGE_TAG
+          ports:
+            - containerPort: 80
+---
+# ---------- Frontend: the public door ----------
+# LoadBalancer = gets a public address and spreads traffic over both pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80

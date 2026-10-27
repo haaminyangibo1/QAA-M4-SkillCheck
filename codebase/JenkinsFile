@@ -1,1 +1,54 @@
-# JenkinsFile for our CI CD Server
+// JenkinsFile for our CI CD Server
+// Job setup: Pipeline script from SCM, Script Path = codebase/JenkinsFile,
+// Build Trigger = "GitHub hook trigger for GITScm polling".
+// Needs a Jenkins credential, ID "dockerhub" (Username with password:
+// DockerHub username + access token).
+
+pipeline {
+    agent any
+
+    environment {
+        // credentials() gives us DOCKERHUB_USR and DOCKERHUB_PSW,
+        // and Jenkins masks them in the logs.
+        DOCKERHUB = credentials('dockerhub')
+        // A new tag every build, so Kubernetes always sees a change
+        TAG = "${BUILD_NUMBER}"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Clone down the exact commit that triggered this build
+                checkout scm
+            }
+        }
+
+        stage('Build images') {
+            steps {
+                sh 'docker build -t $DOCKERHUB_USR/colour-backend:$TAG codebase/backend'
+                sh 'docker build -t $DOCKERHUB_USR/colour-frontend:$TAG codebase/frontend'
+            }
+        }
+
+        stage('Push images') {
+            steps {
+                sh 'echo $DOCKERHUB_PSW | docker login -u $DOCKERHUB_USR --password-stdin'
+                sh 'docker push $DOCKERHUB_USR/colour-backend:$TAG'
+                sh 'docker push $DOCKERHUB_USR/colour-frontend:$TAG'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                // 2x backend pods + 2x frontend pods
+                sh 'bash codebase/k8s-deploy.sh $DOCKERHUB_USR $TAG'
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker logout || true'
+        }
+    }
+}
